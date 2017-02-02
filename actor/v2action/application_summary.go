@@ -22,19 +22,16 @@ func (actor Actor) GetApplicationSummaryByNameAndSpace(name string, spaceGUID st
 		Application: app,
 	}
 
-	if app.State != ccv2.ApplicationStopped {
+	if app.State == ccv2.ApplicationStarted {
 		var instances []ApplicationInstance
 		instances, warnings, err = actor.GetApplicationInstancesByApplication(app.GUID)
 		allWarnings = append(allWarnings, warnings...)
 
-		switch err.(type) {
-		case nil:
-			applicationSummary.RunningInstances = instances
-		case ccv2.AppStoppedStatsError:
-			// Don't do anything
-		default:
+		if err != nil {
 			return ApplicationSummary{}, allWarnings, err
 		}
+
+		applicationSummary.RunningInstances = instances
 	}
 
 	routes, warnings, err := actor.GetApplicationRoutes(app.GUID, nil)

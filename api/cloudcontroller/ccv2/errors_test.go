@@ -110,6 +110,38 @@ Description:   some-error-description`))
 							Message: "bad request",
 						}))
 					})
+
+					Context("when a not staged error is encountered", func() {
+						BeforeEach(func() {
+							response = `{
+								"description": "App has not finished staging",
+								"error_code": "CF-NotStaged"
+							}`
+						})
+
+						It("returns a NotStagedError", func() {
+							_, _, err := client.GetApplications(nil)
+							Expect(err).To(MatchError(NotStagedError{
+								Message: "App has not finished staging",
+							}))
+						})
+					})
+
+					Context("when an instances error is encountered", func() {
+						BeforeEach(func() {
+							response = `{
+								"description": "instances went bananas",
+								"error_code": "CF-InstancesError"
+							}`
+						})
+
+						It("returns an InstancesError", func() {
+							_, _, err := client.GetApplications(nil)
+							Expect(err).To(MatchError(InstancesError{
+								Message: "instances went bananas",
+							}))
+						})
+					})
 				})
 
 				Context("getting stats for a stopped app", func() {

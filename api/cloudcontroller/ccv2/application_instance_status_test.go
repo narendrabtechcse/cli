@@ -86,7 +86,7 @@ var _ = Describe("Application Instance Status", func() {
 					ID:          0,
 					Memory:      29880320,
 					MemoryQuota: 536870912,
-					State:       ApplicationInstanceRunning,
+					State:       ApplicationInstanceStatusRunning,
 					Uptime:      65007,
 				},
 				))
@@ -98,7 +98,7 @@ var _ = Describe("Application Instance Status", func() {
 					ID:          1,
 					Memory:      29880320,
 					MemoryQuota: 536870912,
-					State:       ApplicationInstanceStarting,
+					State:       ApplicationInstanceStatusStarting,
 					Uptime:      65007,
 				},
 				))

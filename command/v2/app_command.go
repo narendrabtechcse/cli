@@ -35,8 +35,8 @@ type AppCommand struct {
 }
 
 func (cmd *AppCommand) Setup(config command.Config, ui command.UI) error {
-	cmd.Config = config
 	cmd.UI = ui
+	cmd.Config = config
 	cmd.SharedActor = sharedaction.NewActor()
 
 	ccClient, uaaClient, err := shared.NewClients(config, ui)
@@ -80,11 +80,7 @@ func (cmd AppCommand) Execute(args []string) error {
 		return cmd.DisplayAppGUID()
 	}
 
-	appSummary, warnings, err := cmd.Actor.GetApplicationSummaryByNameAndSpace(
-		cmd.RequiredArgs.AppName,
-		cmd.Config.TargetedSpace().GUID,
-	)
-
+	appSummary, warnings, err := cmd.Actor.GetApplicationSummaryByNameAndSpace(cmd.RequiredArgs.AppName, cmd.Config.TargetedSpace().GUID)
 	cmd.UI.DisplayWarnings(warnings)
 	if err != nil {
 		return shared.HandleError(err)
@@ -99,11 +95,7 @@ func (cmd AppCommand) Execute(args []string) error {
 }
 
 func (cmd *AppCommand) DisplayAppGUID() error {
-	app, warnings, err := cmd.Actor.GetApplicationByNameAndSpace(
-		cmd.RequiredArgs.AppName,
-		cmd.Config.TargetedSpace().GUID,
-	)
-
+	app, warnings, err := cmd.Actor.GetApplicationByNameAndSpace(cmd.RequiredArgs.AppName, cmd.Config.TargetedSpace().GUID)
 	cmd.UI.DisplayWarnings(warnings)
 	if err != nil {
 		return shared.HandleError(err)
