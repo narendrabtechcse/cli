@@ -41,9 +41,9 @@ type ApplicationInstance struct {
 	State ApplicationInstanceState
 }
 
-// NewApplicationInstance returns a pointer to a new ApplicationInstance.
-func NewApplicationInstance(id int) *ApplicationInstance {
-	return &ApplicationInstance{ID: id}
+// newApplicationInstance returns a pointer to a new ApplicationInstance.
+func newApplicationInstance(id int) ApplicationInstance {
+	return ApplicationInstance{ID: id}
 }
 
 func (instance ApplicationInstance) TimeSinceCreation() time.Time {
@@ -68,6 +68,12 @@ func (instance *ApplicationInstance) incomplete() {
 	instance.Details = strings.TrimSpace(fmt.Sprintf("%s (%s)", instance.Details, "Unable to retrieve information"))
 }
 
+type ApplicationInstances []ApplicationInstance
+
+func (a ApplicationInstances) Len() int               { return len(a) }
+func (a ApplicationInstances) Swap(i int, j int)      { a[i], a[j] = a[j], a[i] }
+func (a ApplicationInstances) Less(i int, j int) bool { return a[i].ID < a[j].ID }
+
 // ApplicationInstancesNotFoundError is returned when a requested application is not
 // found.
 type ApplicationInstancesNotFoundError struct {
@@ -81,7 +87,7 @@ func (e ApplicationInstancesNotFoundError) Error() string {
 func (actor Actor) GetApplicationInstancesByApplication(guid string) ([]ApplicationInstance, Warnings, error) {
 	var allWarnings Warnings
 
-	ccAppInstanceStatuses, warnings, err := actor.CloudControllerClient.GetApplicationInstanceStatusesByApplication(guid)
+	appInstanceStats, warnings, err := actor.CloudControllerClient.GetApplicationInstanceStatusesByApplication(guid)
 	allWarnings = append(allWarnings, warnings...)
 
 	switch err.(type) {
@@ -93,44 +99,42 @@ func (actor Actor) GetApplicationInstancesByApplication(guid string) ([]Applicat
 		return nil, allWarnings, err
 	}
 
-	ccAppInstances, warnings, err := actor.CloudControllerClient.GetApplicationInstancesByApplication(guid)
+	appInstances, warnings, err := actor.CloudControllerClient.GetApplicationInstancesByApplication(guid)
 	allWarnings = append(allWarnings, warnings...)
-
 	if err != nil {
 		return nil, allWarnings, err
 	}
 
-	appInstances := []ApplicationInstance{}
+	returnedInstances := ApplicationInstances{}
+	seenStatuses := make(map[int]bool, len(appInstanceStats))
 
-	seenStatuses := make(map[int]bool, len(ccAppInstanceStatuses))
-
-	for id, appInstanceStatus := range ccAppInstanceStatuses {
+	for id, appInstanceStat := range appInstanceStats {
 		seenStatuses[id] = true
 
-		appInstance := NewApplicationInstance(id)
-		appInstance.setStats(appInstanceStatus)
+		returnedInstance := newApplicationInstance(id)
+		returnedInstance.setStats(appInstanceStat)
 
-		if ccAppInstance, found := ccAppInstances[id]; found {
-			appInstance.setInstance(ccAppInstance)
+		if appInstance, found := appInstances[id]; found {
+			returnedInstance.setInstance(appInstance)
 		} else {
-			appInstance.incomplete()
+			returnedInstance.incomplete()
 		}
 
-		appInstances = append(appInstances, *appInstance)
+		returnedInstances = append(returnedInstances, returnedInstance)
 	}
 
 	// add instances that are missing stats
-	for index, instance := range ccAppInstances {
+	for index, appInstance := range appInstances {
 		if _, found := seenStatuses[index]; !found {
-			appInstance := NewApplicationInstance(index)
-			appInstance.setInstance(instance)
-			appInstance.incomplete()
+			returnedInstance := newApplicationInstance(index)
+			returnedInstance.setInstance(appInstance)
+			returnedInstance.incomplete()
 
-			appInstances = append(appInstances, *appInstance)
+			returnedInstances = append(returnedInstances, returnedInstance)
 		}
 	}
 
-	return appInstances, allWarnings, err
+	return returnedInstances, allWarnings, err
 
 	// return sortAppInstancesByID(appInstances), allWarnings, err
 }
