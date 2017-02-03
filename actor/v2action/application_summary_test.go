@@ -15,28 +15,49 @@ var _ = Describe("Application Summary Actions", func() {
 	var (
 		actor                     Actor
 		fakeCloudControllerClient *v2actionfakes.FakeCloudControllerClient
+		app                       ccv2.Application
 	)
 
 	BeforeEach(func() {
 		fakeCloudControllerClient = new(v2actionfakes.FakeCloudControllerClient)
 		actor = NewActor(fakeCloudControllerClient, nil)
+		app = ccv2.Application{
+			GUID: "some-app-guid",
+			Name: "some-app",
+		}
 	})
 
 	Describe("GetApplicationSummaryByNameSpace", func() {
+		Context("when the application does not exist", func() {
+			BeforeEach(func() {
+				fakeCloudControllerClient.GetApplicationsReturns(
+					[]ccv2.Application{},
+					ccv2.Warnings{"app-warning"},
+					nil)
+			})
+
+			It("returns an ApplicationNotFoundError and all warnings", func() {
+				_, warnings, err := actor.GetApplicationSummaryByNameAndSpace("some-app", "some-space-guid")
+				Expect(err).To(MatchError(ApplicationNotFoundError{Name: "some-app"}))
+				Expect(warnings).To(ConsistOf("app-warning"))
+			})
+		})
+
 		Context("when the application exists", func() {
+			BeforeEach(func() {
+				fakeCloudControllerClient.GetApplicationsReturns(
+					[]ccv2.Application{app},
+					ccv2.Warnings{"app-warning"},
+					nil)
+			})
+
 			Context("when the application is STARTED", func() {
 				BeforeEach(func() {
+					app.State = ccv2.ApplicationStarted
 					fakeCloudControllerClient.GetApplicationsReturns(
-						[]ccv2.Application{
-							{
-								GUID:  "some-app-guid",
-								Name:  "some-app",
-								State: ccv2.ApplicationStarted,
-							},
-						},
+						[]ccv2.Application{app},
 						ccv2.Warnings{"app-warning"},
-						nil,
-					)
+						nil)
 				})
 
 				Context("when instance information is available", func() {
@@ -47,16 +68,14 @@ var _ = Describe("Application Summary Actions", func() {
 								1: {ID: 1},
 							},
 							ccv2.Warnings{"stats-warning"},
-							nil,
-						)
+							nil)
 						fakeCloudControllerClient.GetApplicationInstancesByApplicationReturns(
 							map[int]ccv2.ApplicationInstance{
 								0: {ID: 0},
 								1: {ID: 1},
 							},
 							ccv2.Warnings{"instance-warning"},
-							nil,
-						)
+							nil)
 					})
 
 					It("returns the application with instance information and warnings", func() {
@@ -73,93 +92,44 @@ var _ = Describe("Application Summary Actions", func() {
 								{ID: 1},
 							},
 						}))
-						Expect(warnings).To(Equal(Warnings{"app-warning", "stats-warning", "instance-warning"}))
+						Expect(warnings).To(ConsistOf("app-warning", "stats-warning", "instance-warning"))
+					})
+				})
+
+				Context("when instance information is not available", func() {
+					BeforeEach(func() {
+						fakeCloudControllerClient.GetApplicationInstanceStatusesByApplicationReturns(
+							nil,
+							ccv2.Warnings{"stats-warning"},
+							ccv2.AppStoppedStatsError{})
+					})
+
+					It("returns the empty list of instances and all warnings", func() {
+						app, warnings, err := actor.GetApplicationSummaryByNameAndSpace("some-app", "some-space-guid")
+						Expect(err).ToNot(HaveOccurred())
+						Expect(app.RunningInstances).To(BeEmpty())
+						Expect(warnings).To(ConsistOf("app-warning", "stats-warning"))
 					})
 				})
 			})
 
-			Context("when the application not STARTED", func() {
+			Context("when the application is not STARTED", func() {
 				BeforeEach(func() {
-					fakeCloudControllerClient.GetApplicationsReturns(
-						[]ccv2.Application{
-							{
-								GUID:  "some-app-guid",
-								Name:  "some-app",
-								State: ccv2.ApplicationStopped,
-							},
-						},
-						ccv2.Warnings{"app-warning"},
-						nil,
-					)
-					fakeCloudControllerClient.GetApplicationRoutesReturns(
-						[]ccv2.Route{
-							{
-								GUID: "some-route-1-guid",
-								Host: "host-1",
-							},
-							{
-								GUID: "some-route-2-guid",
-								Host: "host-2",
-							},
-						},
-						ccv2.Warnings{"get-application-routes-warning"},
-						nil,
-					)
-					fakeCloudControllerClient.GetStackReturns(
-						ccv2.Stack{Name: "some-stack"},
-						ccv2.Warnings{"get-application-stack-warning"},
-						nil,
-					)
+					app.State = ccv2.ApplicationStopped
 				})
 
 				It("does not try and get application instance information", func() {
 					app, _, err := actor.GetApplicationSummaryByNameAndSpace("some-app", "some-space-guid")
 					Expect(err).ToNot(HaveOccurred())
-
 					Expect(app.RunningInstances).To(BeEmpty())
+
 					Expect(fakeCloudControllerClient.GetApplicationInstanceStatusesByApplicationCallCount()).To(Equal(0))
 					Expect(fakeCloudControllerClient.GetApplicationInstancesByApplicationCallCount()).To(Equal(0))
 				})
-
-				It("returns the routes", func() {
-					app, _, err := actor.GetApplicationSummaryByNameAndSpace("some-app", "some-space-guid")
-					Expect(err).ToNot(HaveOccurred())
-
-					Expect(app.Routes).To(ConsistOf(
-						Route{
-							GUID: "some-route-1-guid",
-							Host: "host-1",
-						},
-						Route{
-							GUID: "some-route-2-guid",
-							Host: "host-2",
-						},
-					))
-				})
-
-				It("returns the stack information", func() {
-					app, _, err := actor.GetApplicationSummaryByNameAndSpace("some-app", "some-space-guid")
-					Expect(err).ToNot(HaveOccurred())
-
-					Expect(app.Stack).To(Equal(Stack{Name: "some-stack"}))
-				})
 			})
-		})
 
-		Context("when the application is STARTED", func() {
-			Context("when the application has routes", func() {
+			Context("when the app has routes", func() {
 				BeforeEach(func() {
-					fakeCloudControllerClient.GetApplicationsReturns(
-						[]ccv2.Application{
-							{
-								GUID:  "some-app-guid",
-								Name:  "some-app",
-								State: ccv2.ApplicationStarted,
-							},
-						},
-						ccv2.Warnings{"app-warning"},
-						nil,
-					)
 					fakeCloudControllerClient.GetApplicationRoutesReturns(
 						[]ccv2.Route{
 							{
@@ -172,13 +142,13 @@ var _ = Describe("Application Summary Actions", func() {
 							},
 						},
 						ccv2.Warnings{"get-application-routes-warning"},
-						nil,
-					)
+						nil)
 				})
 
-				It("returns the routes", func() {
+				It("returns the routes and all warnings", func() {
 					app, warnings, err := actor.GetApplicationSummaryByNameAndSpace("some-app", "some-space-guid")
 					Expect(err).ToNot(HaveOccurred())
+					Expect(warnings).To(ConsistOf("app-warning", "get-application-routes-warning"))
 					Expect(app.Routes).To(ConsistOf(
 						Route{
 							GUID: "some-route-1-guid",
@@ -189,7 +159,6 @@ var _ = Describe("Application Summary Actions", func() {
 							Host: "host-2",
 						},
 					))
-					Expect(warnings).To(Equal(Warnings{"app-warning", "get-application-routes-warning"}))
 				})
 
 				Context("when an error is encountered while getting routes", func() {
@@ -204,40 +173,28 @@ var _ = Describe("Application Summary Actions", func() {
 						)
 					})
 
-					It("returns the error", func() {
+					It("returns the error and all warnings", func() {
 						app, warnings, err := actor.GetApplicationSummaryByNameAndSpace("some-app", "some-space-guid")
 						Expect(err).To(MatchError(expectedErr))
 						Expect(app.Routes).To(BeEmpty())
-						Expect(warnings).To(Equal(Warnings{"app-warning", "get-application-routes-warning"}))
+						Expect(warnings).To(ConsistOf("app-warning", "get-application-routes-warning"))
 					})
 				})
 			})
 
-			Context("when the application's stack information exists", func() {
+			Context("when the app has stack information", func() {
 				BeforeEach(func() {
-					fakeCloudControllerClient.GetApplicationsReturns(
-						[]ccv2.Application{
-							{
-								GUID:  "some-app-guid",
-								Name:  "some-app",
-								State: ccv2.ApplicationStarted,
-							},
-						},
-						ccv2.Warnings{"app-warning"},
-						nil,
-					)
 					fakeCloudControllerClient.GetStackReturns(
 						ccv2.Stack{Name: "some-stack"},
 						ccv2.Warnings{"get-application-stack-warning"},
-						nil,
-					)
+						nil)
 				})
 
-				It("returns the stack information", func() {
+				It("returns the stack information and all warnings", func() {
 					app, warnings, err := actor.GetApplicationSummaryByNameAndSpace("some-app", "some-space-guid")
 					Expect(err).ToNot(HaveOccurred())
+					Expect(warnings).To(ConsistOf("app-warning", "get-application-stack-warning"))
 					Expect(app.Stack).To(Equal(Stack{Name: "some-stack"}))
-					Expect(warnings).To(Equal(Warnings{"app-warning", "get-application-stack-warning"}))
 				})
 
 				Context("when an error is encountered while getting stack", func() {
@@ -252,23 +209,12 @@ var _ = Describe("Application Summary Actions", func() {
 						)
 					})
 
-					It("returns the error", func() {
+					It("returns the error and all warnings", func() {
 						app, warnings, err := actor.GetApplicationSummaryByNameAndSpace("some-app", "some-space-guid")
 						Expect(err).To(MatchError(expectedErr))
 						Expect(app.Stack).To(Equal(Stack{}))
-						Expect(warnings).To(Equal(Warnings{"app-warning", "get-application-stack-warning"}))
+						Expect(warnings).To(ConsistOf("app-warning", "get-application-stack-warning"))
 					})
-				})
-			})
-
-			Context("when the application does not exist", func() {
-				BeforeEach(func() {
-					fakeCloudControllerClient.GetApplicationsReturns([]ccv2.Application{}, nil, nil)
-				})
-
-				It("returns an ApplicationNotFoundError", func() {
-					_, _, err := actor.GetApplicationSummaryByNameAndSpace("some-app", "some-space-guid")
-					Expect(err).To(MatchError(ApplicationNotFoundError{Name: "some-app"}))
 				})
 			})
 		})

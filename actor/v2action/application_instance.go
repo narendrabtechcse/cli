@@ -2,6 +2,7 @@ package v2action
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -68,11 +69,11 @@ func (instance *ApplicationInstance) incomplete() {
 	instance.Details = strings.TrimSpace(fmt.Sprintf("%s (%s)", instance.Details, "Unable to retrieve information"))
 }
 
-type ApplicationInstances []ApplicationInstance
+type applicationInstances []ApplicationInstance
 
-func (a ApplicationInstances) Len() int               { return len(a) }
-func (a ApplicationInstances) Swap(i int, j int)      { a[i], a[j] = a[j], a[i] }
-func (a ApplicationInstances) Less(i int, j int) bool { return a[i].ID < a[j].ID }
+func (a applicationInstances) Len() int               { return len(a) }
+func (a applicationInstances) Swap(i int, j int)      { a[i], a[j] = a[j], a[i] }
+func (a applicationInstances) Less(i int, j int) bool { return a[i].ID < a[j].ID }
 
 // ApplicationInstancesNotFoundError is returned when a requested application is not
 // found.
@@ -91,7 +92,7 @@ func (actor Actor) GetApplicationInstancesByApplication(guid string) ([]Applicat
 	allWarnings = append(allWarnings, warnings...)
 
 	switch err.(type) {
-	case cloudcontroller.ResourceNotFoundError:
+	case cloudcontroller.ResourceNotFoundError, ccv2.AppStoppedStatsError:
 		return nil, allWarnings, ApplicationInstancesNotFoundError{ApplicationGUID: guid}
 	case nil:
 		// continue
@@ -101,11 +102,25 @@ func (actor Actor) GetApplicationInstancesByApplication(guid string) ([]Applicat
 
 	appInstances, warnings, err := actor.CloudControllerClient.GetApplicationInstancesByApplication(guid)
 	allWarnings = append(allWarnings, warnings...)
-	if err != nil {
+
+	switch err.(type) {
+	case ccv2.NotStagedError, ccv2.InstancesError:
+		return nil, allWarnings, ApplicationInstancesNotFoundError{ApplicationGUID: guid}
+	case nil:
+		// continue
+	default:
 		return nil, allWarnings, err
 	}
 
-	returnedInstances := ApplicationInstances{}
+	returnedInstances := combineStatsAndInstances(appInstanceStats, appInstances)
+
+	sort.Sort(returnedInstances)
+
+	return returnedInstances, allWarnings, err
+}
+
+func combineStatsAndInstances(appInstanceStats map[int]ccv2.ApplicationInstanceStatus, appInstances map[int]ccv2.ApplicationInstance) applicationInstances {
+	returnedInstances := applicationInstances{}
 	seenStatuses := make(map[int]bool, len(appInstanceStats))
 
 	for id, appInstanceStat := range appInstanceStats {
@@ -134,41 +149,5 @@ func (actor Actor) GetApplicationInstancesByApplication(guid string) ([]Applicat
 		}
 	}
 
-	return returnedInstances, allWarnings, err
-
-	// return sortAppInstancesByID(appInstances), allWarnings, err
+	return returnedInstances
 }
-
-// func sortAppInstancesByID(instances []ApplicationInstance) []ApplicationInstance {
-// 	instancesMap := map[int]ApplicationInstance{}
-// 	var ids []int
-
-// 	for _, instance := range instances {
-// 		ids = append(ids, instance.ID)
-// 		instancesMap[instance.ID] = instance
-// 	}
-
-// 	sort.Ints(ids)
-
-// 	var sortedInstances []ApplicationInstance
-
-// 	for id := range ids {
-// 		sortedInstances = append(sortedInstances, instancesMap[id])
-// 	}
-
-// 	return sortedInstances
-// }
-
-// func (client *Client) sortedInstanceKeys(instances map[string]ApplicationInstanceStatus) ([]int, error) {
-// 	var keys []int
-// 	for key, _ := range instances {
-// 		id, err := strconv.Atoi(key)
-// 		if err != nil {
-// 			return nil, err
-// 		}
-// 		keys = append(keys, id)
-// 	}
-// 	sort.Ints(keys)
-
-// 	return keys, nil
-// }

@@ -78,7 +78,7 @@ var _ = Describe("Application Instance Actions", func() {
 						DiskQuota:   100,
 						Details:     "hello",
 						Since:       1485985587.12345,
-						State:       ccv2.ApplicationInstanceRunning,
+						State:       ApplicationInstanceState(ccv2.ApplicationInstanceRunning),
 					},
 					ApplicationInstance{ID: 1, CPU: 200, Details: "hi", Since: 1485985587.567}))
 				Expect(warnings).To(ConsistOf(
@@ -129,6 +129,70 @@ var _ = Describe("Application Instance Actions", func() {
 				})
 			})
 
+			Context("when the desired state of the app is STARTED", func() {
+				Context("when the app has not been staged yet", func() {
+					Context("when getting instance stats returns a CF-AppStoppedStatsError", func() {
+						BeforeEach(func() {
+							fakeCloudControllerClient.GetApplicationInstanceStatusesByApplicationReturns(
+								nil,
+								nil,
+								ccv2.AppStoppedStatsError{})
+						})
+
+						It("returns an ApplicationInstancesNotFoundError", func() {
+							_, _, err := actor.GetApplicationInstancesByApplication("some-app-guid")
+							Expect(err).To(MatchError(ApplicationInstancesNotFoundError{ApplicationGUID: "some-app-guid"}))
+						})
+					})
+
+					Context("when getting instances returns a CF-NotStaged error", func() {
+						BeforeEach(func() {
+							fakeCloudControllerClient.GetApplicationInstancesByApplicationReturns(
+								nil,
+								nil,
+								ccv2.NotStagedError{})
+						})
+
+						It("returns an ApplicationInstancesNotFoundError", func() {
+							_, _, err := actor.GetApplicationInstancesByApplication("some-app-guid")
+							Expect(err).To(MatchError(ApplicationInstancesNotFoundError{ApplicationGUID: "some-app-guid"}))
+						})
+					})
+				})
+
+				Context("when the app is not yet running", func() {
+					Context("when getting instance stats returns a CF-AppStoppedStatsError", func() {
+						BeforeEach(func() {
+							fakeCloudControllerClient.GetApplicationInstanceStatusesByApplicationReturns(
+								nil,
+								nil,
+								ccv2.AppStoppedStatsError{})
+						})
+
+						It("returns an ApplicationInstancesNotFoundError", func() {
+							_, _, err := actor.GetApplicationInstancesByApplication("some-app-guid")
+							Expect(err).To(MatchError(ApplicationInstancesNotFoundError{ApplicationGUID: "some-app-guid"}))
+						})
+					})
+
+					Context("when getting instances returns a CF-InstancesError", func() {
+						BeforeEach(func() {
+							fakeCloudControllerClient.GetApplicationInstancesByApplicationReturns(
+								nil,
+								nil,
+								ccv2.InstancesError{})
+						})
+
+						It("returns an ApplicationInstancesNotFoundError", func() {
+							_, _, err := actor.GetApplicationInstancesByApplication("some-app-guid")
+							Expect(err).To(MatchError(ApplicationInstancesNotFoundError{ApplicationGUID: "some-app-guid"}))
+						})
+					})
+				})
+			})
+		})
+
+		Context("when getting the stats and instances return different number of results", func() {
 			Context("when an instance is missing from stats", func() {
 				BeforeEach(func() {
 					fakeCloudControllerClient.GetApplicationInstanceStatusesByApplicationReturns(

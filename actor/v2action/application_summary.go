@@ -18,22 +18,22 @@ func (actor Actor) GetApplicationSummaryByNameAndSpace(name string, spaceGUID st
 		return ApplicationSummary{}, allWarnings, err
 	}
 
-	applicationSummary := ApplicationSummary{
-		Application: app,
-	}
+	applicationSummary := ApplicationSummary{Application: app}
 
 	// cloud controller calls the instance reporter only when the desired
 	// application state is STARTED
 	if app.State == ccv2.ApplicationStarted {
-		var instances []ApplicationInstance
-		instances, warnings, err = actor.GetApplicationInstancesByApplication(app.GUID)
+		instances, warnings, err := actor.GetApplicationInstancesByApplication(app.GUID)
 		allWarnings = append(allWarnings, warnings...)
 
-		if err != nil {
+		switch err.(type) {
+		case nil:
+			applicationSummary.RunningInstances = instances
+		case ApplicationInstancesNotFoundError:
+			// don't set instances in summary
+		default:
 			return ApplicationSummary{}, allWarnings, err
 		}
-
-		applicationSummary.RunningInstances = instances
 	}
 
 	routes, warnings, err := actor.GetApplicationRoutes(app.GUID, nil)

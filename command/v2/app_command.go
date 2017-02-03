@@ -67,6 +67,10 @@ func (cmd AppCommand) Execute(args []string) error {
 		return shared.HandleError(err)
 	}
 
+	if cmd.GUID {
+		return cmd.DisplayAppGUID()
+	}
+
 	cmd.UI.DisplayTextWithFlavor("Showing health and status for app {{.AppName}} in org {{.OrgName}} / space {{.SpaceName}} as {{.Username}}...",
 		map[string]interface{}{
 			"AppName":   cmd.RequiredArgs.AppName,
@@ -76,19 +80,18 @@ func (cmd AppCommand) Execute(args []string) error {
 		})
 	cmd.UI.DisplayNewline()
 
-	if cmd.GUID {
-		return cmd.DisplayAppGUID()
-	}
-
 	appSummary, warnings, err := cmd.Actor.GetApplicationSummaryByNameAndSpace(cmd.RequiredArgs.AppName, cmd.Config.TargetedSpace().GUID)
 	cmd.UI.DisplayWarnings(warnings)
 	if err != nil {
 		return shared.HandleError(err)
 	}
 
-	err = ShowApp(appSummary, cmd.UI)
-	if err != nil {
-		return shared.HandleError(err)
+	showAppSummaryTable(appSummary, cmd.UI)
+
+	if len(appSummary.RunningInstances) == 0 {
+		cmd.UI.DisplayText("There are no running instances of this app.")
+	} else {
+		showAppInstanceTable(appSummary, cmd.UI)
 	}
 
 	return nil
@@ -105,7 +108,7 @@ func (cmd *AppCommand) DisplayAppGUID() error {
 	return nil
 }
 
-func ShowApp(appSummary v2action.ApplicationSummary, ui command.UI) error {
+func showAppSummaryTable(appSummary v2action.ApplicationSummary, ui command.UI) {
 	// Application Summary Table
 	instances := fmt.Sprintf("%d/%d", len(appSummary.RunningInstances), appSummary.Instances)
 
@@ -133,9 +136,11 @@ func ShowApp(appSummary v2action.ApplicationSummary, ui command.UI) error {
 
 	ui.DisplayTable("", table, 3)
 	ui.DisplayNewline()
+}
 
+func showAppInstanceTable(appSummary v2action.ApplicationSummary, ui command.UI) {
 	// Instance List Table
-	table = [][]string{
+	table := [][]string{
 		{"", "State", "Since", "CPU", "Memory", "Disk"},
 	}
 
@@ -144,7 +149,7 @@ func ShowApp(appSummary v2action.ApplicationSummary, ui command.UI) error {
 			[]string{
 				fmt.Sprintf("#%d", instance.ID),
 				ui.TranslateText(strings.ToLower(string(instance.State))),
-				ui.UserFriendlyDate(instance.StartTime()),
+				ui.UserFriendlyDate(instance.TimeSinceCreation()),
 				fmt.Sprintf("%.1f%%", instance.CPU*100),
 				fmt.Sprintf("%s of %s", bytefmt.ByteSize(uint64(instance.Memory)), bytefmt.ByteSize(uint64(instance.MemoryQuota))),
 				fmt.Sprintf("%s of %s", bytefmt.ByteSize(uint64(instance.Disk)), bytefmt.ByteSize(uint64(instance.DiskQuota))),
@@ -152,5 +157,5 @@ func ShowApp(appSummary v2action.ApplicationSummary, ui command.UI) error {
 	}
 	ui.DisplayTable("", table, 3)
 
-	return nil
+	return
 }

@@ -14,11 +14,11 @@ type ApplicationInstanceStatusState string
 
 const (
 	ApplicationInstanceStatusCrashed  ApplicationInstanceStatusState = "CRASHED"
-	ApplicationInstanceStatusDown                                    = "DOWN"
-	ApplicationInstanceStatusFlapping                                = "FLAPPING"
-	ApplicationInstanceStatusRunning                                 = "RUNNING"
-	ApplicationInstanceStatusStarting                                = "STARTING"
-	ApplicationInstanceStatusUnknown                                 = "UNKNOWN"
+	ApplicationInstanceStatusDown     ApplicationInstanceStatusState = "DOWN"
+	ApplicationInstanceStatusFlapping ApplicationInstanceStatusState = "FLAPPING"
+	ApplicationInstanceStatusRunning  ApplicationInstanceStatusState = "RUNNING"
+	ApplicationInstanceStatusStarting ApplicationInstanceStatusState = "STARTING"
+	ApplicationInstanceStatusUnknown  ApplicationInstanceStatusState = "UNKNOWN"
 )
 
 // ApplicationInstanceStatus represents a Cloud Controller Application Instance.
