@@ -752,6 +752,10 @@
     "translation": ""
   },
   {
+    "id": "Details",
+    "translation": ""
+  },
+  {
     "id": "Disk",
     "translation": ""
   },
@@ -1006,6 +1010,10 @@
   {
     "id": "Repository: ",
     "translation": "Repository: "
+  },
+  {
+    "id": "Requested state:",
+    "translation": ""
   },
   {
     "id": "Resource matching API timed out; pushing all app files.",

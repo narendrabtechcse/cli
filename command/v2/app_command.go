@@ -5,14 +5,13 @@ import (
 	"os"
 	"strings"
 
-	"github.com/cloudfoundry/bytefmt"
-
 	"code.cloudfoundry.org/cli/actor/sharedaction"
 	"code.cloudfoundry.org/cli/actor/v2action"
 	oldCmd "code.cloudfoundry.org/cli/cf/cmd"
 	"code.cloudfoundry.org/cli/command"
 	"code.cloudfoundry.org/cli/command/flag"
 	"code.cloudfoundry.org/cli/command/v2/shared"
+	"github.com/cloudfoundry/bytefmt"
 )
 
 //go:generate counterfeiter . AppActor
@@ -28,10 +27,10 @@ type AppCommand struct {
 	usage           interface{}  `usage:"CF_NAME app APP_NAME"`
 	relatedCommands interface{}  `related_commands:"apps, events, logs, map-route, unmap-route, push"`
 
+	UI          command.UI
 	Config      command.Config
 	SharedActor command.SharedActor
 	Actor       AppActor
-	UI          command.UI
 }
 
 func (cmd *AppCommand) Setup(config command.Config, ui command.UI) error {
@@ -68,10 +67,11 @@ func (cmd AppCommand) Execute(args []string) error {
 	}
 
 	if cmd.GUID {
-		return cmd.DisplayAppGUID()
+		return cmd.displayAppGUID()
 	}
 
-	cmd.UI.DisplayTextWithFlavor("Showing health and status for app {{.AppName}} in org {{.OrgName}} / space {{.SpaceName}} as {{.Username}}...",
+	cmd.UI.DisplayTextWithFlavor(
+		"Showing health and status for app {{.AppName}} in org {{.OrgName}} / space {{.SpaceName}} as {{.Username}}...",
 		map[string]interface{}{
 			"AppName":   cmd.RequiredArgs.AppName,
 			"OrgName":   cmd.Config.TargetedOrganization().Name,
@@ -86,18 +86,18 @@ func (cmd AppCommand) Execute(args []string) error {
 		return shared.HandleError(err)
 	}
 
-	showAppSummaryTable(appSummary, cmd.UI)
+	cmd.displayAppSummary(appSummary)
 
 	if len(appSummary.RunningInstances) == 0 {
 		cmd.UI.DisplayText("There are no running instances of this app.")
 	} else {
-		showAppInstanceTable(appSummary, cmd.UI)
+		cmd.displayAppInstances(appSummary.RunningInstances)
 	}
 
 	return nil
 }
 
-func (cmd *AppCommand) DisplayAppGUID() error {
+func (cmd AppCommand) displayAppGUID() error {
 	app, warnings, err := cmd.Actor.GetApplicationByNameAndSpace(cmd.RequiredArgs.AppName, cmd.Config.TargetedSpace().GUID)
 	cmd.UI.DisplayWarnings(warnings)
 	if err != nil {
@@ -108,11 +108,11 @@ func (cmd *AppCommand) DisplayAppGUID() error {
 	return nil
 }
 
-func showAppSummaryTable(appSummary v2action.ApplicationSummary, ui command.UI) {
-	// Application Summary Table
+func (cmd AppCommand) displayAppSummary(appSummary v2action.ApplicationSummary) {
 	instances := fmt.Sprintf("%d/%d", len(appSummary.RunningInstances), appSummary.Instances)
 
-	usage := ui.TranslateText("{{.MemorySize}} x {{.NumInstances}} instances",
+	usage := cmd.UI.TranslateText(
+		"{{.MemorySize}} x {{.NumInstances}} instances",
 		map[string]interface{}{
 			"MemorySize":   bytefmt.ByteSize(uint64(appSummary.Memory) * bytefmt.MEGABYTE),
 			"NumInstances": appSummary.Instances,
@@ -125,37 +125,39 @@ func showAppSummaryTable(appSummary v2action.ApplicationSummary, ui command.UI) 
 	routes := strings.Join(formattedRoutes, ", ")
 
 	table := [][]string{
-		{ui.TranslateText("Name:"), appSummary.Name},
-		{ui.TranslateText("Instances:"), instances},
-		{ui.TranslateText("Usage:"), usage},
-		{ui.TranslateText("Routes:"), routes},
-		{ui.TranslateText("Last uploaded:"), ui.UserFriendlyDate(appSummary.PackageUpdatedAt)},
-		{ui.TranslateText("Stack:"), appSummary.Stack.Name},
-		{ui.TranslateText("Buildpack:"), appSummary.Application.CalculatedBuildpack()},
+		{cmd.UI.TranslateText("Name:"), appSummary.Name},
+		{cmd.UI.TranslateText("Requested state:"), strings.ToLower(string(appSummary.State))},
+		{cmd.UI.TranslateText("Instances:"), instances},
+		{cmd.UI.TranslateText("Usage:"), usage},
+		{cmd.UI.TranslateText("Routes:"), routes},
+		{cmd.UI.TranslateText("Last uploaded:"), cmd.UI.UserFriendlyDate(appSummary.PackageUpdatedAt)},
+		{cmd.UI.TranslateText("Stack:"), appSummary.Stack.Name},
+		{cmd.UI.TranslateText("Buildpack:"), appSummary.Application.CalculatedBuildpack()},
 	}
 
-	ui.DisplayTable("", table, 3)
-	ui.DisplayNewline()
+	cmd.UI.DisplayTable("", table, 3)
+	cmd.UI.DisplayNewline()
 }
 
-func showAppInstanceTable(appSummary v2action.ApplicationSummary, ui command.UI) {
-	// Instance List Table
+func (cmd AppCommand) displayAppInstances(instances []v2action.ApplicationInstance) {
 	table := [][]string{
-		{"", "State", "Since", "CPU", "Memory", "Disk"},
+		{"", "State", "Since", "CPU", "Memory", "Disk", "Details"},
 	}
 
-	for _, instance := range appSummary.RunningInstances {
-		table = append(table,
+	for _, instance := range instances {
+		table = append(
+			table,
 			[]string{
 				fmt.Sprintf("#%d", instance.ID),
-				ui.TranslateText(strings.ToLower(string(instance.State))),
-				ui.UserFriendlyDate(instance.TimeSinceCreation()),
+				cmd.UI.TranslateText(strings.ToLower(string(instance.State))),
+				cmd.UI.UserFriendlyDate(instance.TimeSinceCreation()),
 				fmt.Sprintf("%.1f%%", instance.CPU*100),
 				fmt.Sprintf("%s of %s", bytefmt.ByteSize(uint64(instance.Memory)), bytefmt.ByteSize(uint64(instance.MemoryQuota))),
 				fmt.Sprintf("%s of %s", bytefmt.ByteSize(uint64(instance.Disk)), bytefmt.ByteSize(uint64(instance.DiskQuota))),
+				instance.Details,
 			})
 	}
-	ui.DisplayTable("", table, 3)
 
+	cmd.UI.DisplayTable("", table, 3)
 	return
 }

@@ -6,7 +6,6 @@ import (
 	. "code.cloudfoundry.org/cli/actor/v2action"
 	"code.cloudfoundry.org/cli/actor/v2action/v2actionfakes"
 	"code.cloudfoundry.org/cli/api/cloudcontroller/ccv2"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )

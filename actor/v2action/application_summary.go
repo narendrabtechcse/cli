@@ -23,7 +23,8 @@ func (actor Actor) GetApplicationSummaryByNameAndSpace(name string, spaceGUID st
 	// cloud controller calls the instance reporter only when the desired
 	// application state is STARTED
 	if app.State == ccv2.ApplicationStarted {
-		instances, warnings, err := actor.GetApplicationInstancesByApplication(app.GUID)
+		var instances []ApplicationInstance
+		instances, warnings, err = actor.GetApplicationInstancesByApplication(app.GUID)
 		allWarnings = append(allWarnings, warnings...)
 
 		switch err.(type) {
